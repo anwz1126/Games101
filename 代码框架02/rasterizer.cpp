@@ -188,7 +188,7 @@ int rst::rasterizer::get_index(int x, int y)
 void rst::rasterizer::set_pixel(const Eigen::Vector3f& point, const Eigen::Vector3f& color)
 {
     //old index: auto ind = point.y() + point.x() * width;
-    auto ind = (point.y())*width + point.x();
+    auto ind = (point.y())*width + width - point.x();//fixed
     //auto ind = (height-1-point.y())*width + point.x();
     frame_buf[ind] = color;
 

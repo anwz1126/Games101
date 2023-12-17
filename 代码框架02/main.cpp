@@ -162,7 +162,7 @@ int main(int argc, const char** argv)
 
 
 
-        angle += 10./180*MY_PI;
+        //angle += 10./180*MY_PI;
 
 
         r.clear(rst::Buffers::Color | rst::Buffers::Depth);

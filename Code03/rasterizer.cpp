@@ -268,18 +268,66 @@ void rst::rasterizer::rasterize_triangle(const Triangle& t, const std::array<Eig
     // float Z = 1.0 / (alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
     // float zp = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
     // zp *= Z;
+    
 
     // TODO: Interpolate the attributes:
-    // auto interpolated_color
-    // auto interpolated_normal
-    // auto interpolated_texcoords
-    // auto interpolated_shadingcoords
+    auto interpolated_color = Eigen::Vector3f(0,0,0);
+    auto interpolated_normal = Eigen::Vector3f(0,0,0);
+    auto interpolated_texcoords = Eigen::Vector2f(0,0);
+    auto interpolated_shadingcoords = Eigen::Vector3f(0,0,0);
 
     // Use: fragment_shader_payload payload( interpolated_color, interpolated_normal.normalized(), interpolated_texcoords, texture ? &*texture : nullptr);
     // Use: payload.view_pos = interpolated_shadingcoords;
     // Use: Instead of passing the triangle's color directly to the frame buffer, pass the color to the shaders first to get the final color;
     // Use: auto pixel_color = fragment_shader(payload);
+    
+    // payload( interpolated_color, interpolated_normal.normalized(), interpolated_texcoords, texture ? &*texture : nullptr);
+    // payload.view_pos = interpolated_shadingcoords;
+    // auto pixel_color = fragment_shader(payload);
+    
+    auto v = t.toVector4();//{v1,v2,v3}
+    
+    // TODO : Find out the bounding box of current triangle.
+    // iterate through the pixel and find if the current pixel is inside the triangle
+    float xmin=v[0].x(),xmax=v[0].x(),ymin=v[0].y(),ymax=v[0].y();
+    
+    for (auto& vert : v ) {
+        if (vert[0]<xmin){xmin = vert[0];}
+        if (vert[0]>xmax){xmax = vert[0];}
+        if (vert[1]<ymin){ymin = vert[1];}
+        if (vert[1]>ymax){ymax = vert[1];}
+    }
+    
 
+    for (int y=ymin;y<=ymax;y++){
+        if(y<0 or y>=height){continue;}
+        for (int x=xmin;x<=xmax;x++){
+            if(x<0 or x>=width){continue;}
+            // If so, use the following code to get the interpolated z value.
+            auto[alpha, beta, gamma] = computeBarycentric2D(x, y, t.v);
+            float Z = 1.0 / (alpha / v[0].w() + beta / v[1].w() + gamma / v[2].w());
+            float zp = alpha * v[0].z() / v[0].w() + beta * v[1].z() / v[1].w() + gamma * v[2].z() / v[2].w();
+            zp *= Z;
+            if(insideTriangle(x+.5,y+.5,&t.v[0]) and zp<depth_buf[get_index(int(x),int(y))]){
+                //Eigen::Vector3f point = Eigen::Vector3f(x,y,zp);
+                Eigen::Vector3f position0 = Eigen::Vector3f(t.v[0].head<3>());
+                Eigen::Vector3f position1 = Eigen::Vector3f(t.v[1].head<3>());
+                Eigen::Vector3f position2 = Eigen::Vector3f(t.v[2].head<3>());
+                depth_buf[get_index(int(x),int(y))]=zp;
+                //Eigen::Vector3f color_res = t.color[0] * alpha * 255 + t.color[1] * beta * 255 + t.color[2] * gamma * 255;
+                interpolated_color = interpolate(alpha,beta,gamma,t.color[0],t.color[1],t.color[2],1);
+                interpolated_normal = interpolate(alpha,beta,gamma,t.normal[0],t.normal[1],t.normal[2],1);
+                interpolated_texcoords = interpolate(alpha,beta,gamma,t.tex_coords[0],t.tex_coords[1],t.tex_coords[2],1);
+                interpolated_shadingcoords = interpolate(alpha,beta,gamma,view_pos[0],view_pos[1],view_pos[2],1);
+                fragment_shader_payload payload(interpolated_color, interpolated_normal.normalized(), interpolated_texcoords, texture ? &*texture : nullptr);
+                payload.view_pos = interpolated_shadingcoords;
+                auto pixel_color = fragment_shader(payload);
+
+                set_pixel(Eigen::Vector2i(x,y),pixel_color);
+            }
+        }
+    }
+    //TODO : set the current pixel (use the set_pixel function) to the color of the triangle (use getColor function) if it should be painted.
  
 }
 
@@ -326,7 +374,8 @@ int rst::rasterizer::get_index(int x, int y)
 void rst::rasterizer::set_pixel(const Vector2i &point, const Eigen::Vector3f &color)
 {
     //old index: auto ind = point.y() + point.x() * width;
-    int ind = (height-point.y())*width + point.x();
+    //int ind = (height-point.y())*width + point.x();
+    auto ind = (point.y())*width + width - point.x();//fixed
     frame_buf[ind] = color;
 }
 

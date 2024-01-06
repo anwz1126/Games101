@@ -8,6 +8,22 @@
 #include "Texture.hpp"
 #include "OBJ_Loader.h"
 
+// Eigen::Matrix4f Rotation_matrix(Eigen::Vector3f v, double angle) {//new
+//     double x = v[0];
+//     double y = v[1];
+//     double z = v[2];
+
+//     double sin_zetta = std::sin(angle);
+//     double cos_zetta = std::cos(angle);
+//     double one_sub_cos_zetta = 1 - cos_zetta;
+//     Eigen::Matrix4f translate;
+//     translate << cos_zetta + one_sub_cos_zetta * x * x, one_sub_cos_zetta * x * y - sin_zetta * z, one_sub_cos_zetta * x * z + sin_zetta * y,0,
+//     one_sub_cos_zetta * x * y + sin_zetta * z, cos_zetta + one_sub_cos_zetta * y * y, one_sub_cos_zetta * y * z - sin_zetta * x,0,
+//     one_sub_cos_zetta * x * z - sin_zetta * y, one_sub_cos_zetta * y * z + sin_zetta * x, cos_zetta + one_sub_cos_zetta * z * z,0,
+//     0,0,0,1;
+//     return translate;
+// }
+
 Eigen::Matrix4f get_view_matrix(Eigen::Vector3f eye_pos)
 {
     Eigen::Matrix4f view = Eigen::Matrix4f::Identity();
@@ -50,6 +66,20 @@ Eigen::Matrix4f get_model_matrix(float angle)
 Eigen::Matrix4f get_projection_matrix(float eye_fov, float aspect_ratio, float zNear, float zFar)
 {
     // TODO: Use the same projection matrix from the previous assignments
+    Eigen::Matrix4f projection;
+    float t,b,l,r;
+    t = zNear * std::tan(eye_fov/2);
+    b = -t;
+    r = t * aspect_ratio;
+    l = -r;
+    Eigen::Matrix4f translate;
+    translate << 2*zNear/(r-l),0,(r+l)/(r-l),0,
+    0,2*zNear/(t-b),(b+t)/(b-t),0,
+    0,0,(zFar+zNear)/(zNear-zFar),2*zFar*zNear/(zFar-zNear),
+    0,0,1,0;
+    projection = translate*projection;
+    
+    return projection;
 
 }
 
@@ -84,6 +114,7 @@ Eigen::Vector3f texture_fragment_shader(const fragment_shader_payload& payload)
     if (payload.texture)
     {
         // TODO: Get the texture value at the texture coordinates of the current fragment
+        return_color = payload.texture->getColor(payload.tex_coords[0],payload.tex_coords[1]);
 
     }
     Eigen::Vector3f texture_color;
@@ -108,13 +139,22 @@ Eigen::Vector3f texture_fragment_shader(const fragment_shader_payload& payload)
 
     Eigen::Vector3f result_color = {0, 0, 0};
 
-    for (auto& light : lights)
+    auto view_vec = eye_pos - point;
+
+    for(auto& light : lights)
     {
         // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
         // components are. Then, accumulate that result on the *result_color* object.
-
+        auto ref_vec = reflect(view_vec.normalized(),normal.normalized()).normalized();
+        auto loght_vec = light.position-point;
+        auto r = loght_vec.dot(loght_vec);
+        auto cos = ref_vec.dot(loght_vec.normalized());//ref
+        //cos = (view_vec.normalized()+loght_vec.normalized()).normalized().dot(normal);//haf
+        auto lambort = view_vec.normalized().dot(normal.normalized());
+        (lambort < 0)?0:lambort;
+        (cos<0)?0:cos;
+        result_color += ka.cwiseProduct(amb_light_intensity) + lambort*kd.cwiseProduct(light.intensity)/float(r) + light.intensity.cwiseProduct(ks)/float(r)*pow(cos,p);
     }
-
     return result_color * 255.f;
 }
 
@@ -137,12 +177,24 @@ Eigen::Vector3f phong_fragment_shader(const fragment_shader_payload& payload)
     Eigen::Vector3f point = payload.view_pos;
     Eigen::Vector3f normal = payload.normal;
 
+    auto view_vec = eye_pos - point;
+
     Eigen::Vector3f result_color = {0, 0, 0};
     for (auto& light : lights)
     {
         // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
         // components are. Then, accumulate that result on the *result_color* object.
-        
+        // TODO: For each light source in the code, calculate what the *ambient*, *diffuse*, and *specular* 
+        // components are. Then, accumulate that result on the *result_color* object.
+        auto ref_vec = reflect(view_vec.normalized(),normal.normalized()).normalized();
+        auto loght_vec = light.position-point;
+        auto r = loght_vec.dot(loght_vec);
+        auto cos = ref_vec.dot(loght_vec.normalized());//ref
+        //cos = (view_vec.normalized()+loght_vec.normalized()).normalized().dot(normal);//haf
+        auto lambort = view_vec.normalized().dot(normal.normalized());
+        (lambort < 0)?0:lambort;
+        (cos<0)?0:cos;
+        result_color += ka.cwiseProduct(amb_light_intensity) + lambort*kd.cwiseProduct(light.intensity)/float(r) + light.intensity.cwiseProduct(ks)/float(r)*pow(cos,p);
     }
 
     return result_color * 255.f;
@@ -315,12 +367,18 @@ int main(int argc, const char** argv)
     int key = 0;
     int frame_count = 0;
 
+
+    float FOV=45;
+    float aspect_ratio = 1;
+    float zNear = 0.1;
+    float zFar = 50;
+
     if (command_line)
     {
         r.clear(rst::Buffers::Color | rst::Buffers::Depth);
         r.set_model(get_model_matrix(angle));
         r.set_view(get_view_matrix(eye_pos));
-        r.set_projection(get_projection_matrix(45.0, 1, 0.1, 50));
+        r.set_projection(get_projection_matrix(FOV/180*MY_PI, aspect_ratio, zNear, zFar));
 
         r.draw(TriangleList);
         cv::Mat image(700, 700, CV_32FC3, r.frame_buffer().data());
@@ -338,7 +396,7 @@ int main(int argc, const char** argv)
 
         r.set_model(get_model_matrix(angle));
         r.set_view(get_view_matrix(eye_pos));
-        r.set_projection(get_projection_matrix(45.0, 1, 0.1, 50));
+        r.set_projection(get_projection_matrix(FOV/180*MY_PI, aspect_ratio, zNear, zFar));
 
         //r.draw(pos_id, ind_id, col_id, rst::Primitive::Triangle);
         r.draw(TriangleList);

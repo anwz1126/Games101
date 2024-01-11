@@ -14,6 +14,19 @@ void mouse_handler(int event, int x, int y, int flags, void *userdata)
     }     
 }
 
+void AAdraw(cv::Point2f p,float r, cv::Mat &window,int rgb){
+    for(int y = p.y-floor(r+1.);y<=p.y+floor(r+1.);y++){
+        for(int x = p.x-floor(r+1.);x<=p.x+floor(r+1.);x++){
+            cv::Point2f p_now = cv::Point2f(x,y);
+            cv::Point2f vec_now = p_now-p;
+            float r_now = pow(vec_now.x,2)+pow(vec_now.y,2);
+            if(r_now>=pow(r,2)){continue;}
+            r_now = sqrt(r_now);
+            if(window.at<cv::Vec3b>(p_now)[rgb]<255*(1-r_now/r)){window.at<cv::Vec3b>(p_now)[rgb] = 255*(1-r_now/r);}
+        }
+    }
+}
+
 void naive_bezier(const std::vector<cv::Point2f> &points, cv::Mat &window) 
 {
     auto &p_0 = points[0];
@@ -25,8 +38,8 @@ void naive_bezier(const std::vector<cv::Point2f> &points, cv::Mat &window)
     {
         auto point = std::pow(1 - t, 3) * p_0 + 3 * t * std::pow(1 - t, 2) * p_1 +
                  3 * std::pow(t, 2) * (1 - t) * p_2 + std::pow(t, 3) * p_3;
-
-        window.at<cv::Vec3b>(point.y, point.x)[2] = 255;
+        AAdraw(cv::Point2f(point.x, point.y),5,window,2);
+        //window.at<cv::Vec3b>(point.y, point.x)[2] = 255;
     }
 }
 
@@ -49,17 +62,19 @@ cv::Point2f recursive_bezier(const std::vector<cv::Point2f> &control_points, flo
 {
     // TODO: Implement de Casteljau's algorithm
     std::vector<cv::Point2f> points = control_points;
-    return fun(points,t);;
+    return fun(points,t);
     //return recursive_bezier(control_points,t);
 
 }
+
 
 void bezier(const std::vector<cv::Point2f> &control_points, cv::Mat &window) 
 {
     // TODO: Iterate through all t = 0 to t = 1 with small steps, and call de Casteljau's 
     // recursive Bezier algorithm.
-    for (double t = 0.;t<=1;t+=.001){
-        window.at<cv::Vec3b>(recursive_bezier(control_points,t))[2] = 255;
+    for (double t = 0.;t<=1.;t+=.001){
+        AAdraw(recursive_bezier(control_points,t),5,window,1);
+        //window.at<cv::Vec3b>(recursive_bezier(control_points,t))[1] = 255;
     }
 }
 
@@ -82,7 +97,7 @@ int main()
         //std::cout<<control_points.size()<<std::endl;
         if (control_points.size() == 4) 
         {
-            //naive_bezier(control_points, window);
+            naive_bezier(control_points, window);
             bezier(control_points, window);
 
             cv::imshow("Bezier Curve", window);
